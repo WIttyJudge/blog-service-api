@@ -20,32 +20,55 @@ func NewPostgresUser(ctx context.Context, pgPool *pgxpool.Pool) *PostgresUser {
 	}
 }
 
-func (p *PostgresUser) GetByUsername(username string) (*domains.User, error) {
-	return nil, nil
-}
-
 func (p *PostgresUser) GetByEmail(email string) (*domains.User, error) {
-	return nil, nil
+	sql := `
+	  SELECT id, first_name, last_name, email, password, created_at, updated_at
+		FROM users
+		WHERE email = @email
+	`
+
+	args := pgx.NamedArgs{"email": email}
+
+	user := &domains.User{}
+	_ = p.pgPool.QueryRow(p.ctx, sql, args).Scan(
+		&user.ID,
+		&user.FirstName,
+		&user.LastName,
+		&user.Email,
+		&user.Password,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	return user, nil
 }
 
 func (p *PostgresUser) Create(user *domains.User) error {
 	sql := `
-	INSERT INTO users (first_name, last_name, username, email, password)
-	VALUES (@firstName, @lastName, @username, @email, @password)
+		INSERT INTO users (first_name, last_name, email, password)
+		VALUES (@firstName, @lastName, @email, @password)
+		RETURNING id, email
 	`
 
 	args := pgx.NamedArgs{
 		"firstName": user.FirstName,
 		"lastName":  user.LastName,
-		"username":  user.Username,
 		"email":     user.Email,
 		"password":  user.Password,
 	}
 
-	_, err := p.pgPool.Exec(p.ctx, sql, args)
-	if err != nil {
-		return err
-	}
+	return p.pgPool.QueryRow(p.ctx, sql, args).Scan(
+		&user.ID,
+		&user.Email,
+	)
+}
 
-	return nil
+func (p *PostgresUser) CheckIfExistsByEmail(email string) bool {
+	sql := "SELECT EXISTS(SELECT 1 FROM users where email = @email)"
+	args := pgx.NamedArgs{"email": email}
+
+	var resp bool
+	_ = p.pgPool.QueryRow(p.ctx, sql, args).Scan(&resp)
+
+	return resp
 }

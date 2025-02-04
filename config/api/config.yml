@@ -13,3 +13,7 @@ databases:
 api:
   host:
   port: 8080
+  jwt:
+    secret_key: e5ad15f8e659892c3e0fe4bd051d9de1047495e4
+    access_token_ttl: 10m
+    refresh_token_ttl: 72h

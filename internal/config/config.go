@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
 )
@@ -23,13 +24,20 @@ type PostgreSQL struct {
 	Password     string `yaml:"password"`
 	Username     string `yaml:"username"`
 	Database     string `yaml:"database"`
-	SSLMode      string `yaml:"ssl_mode"`
-	PoolMaxConns int    `yaml:"pool_max_conns"`
+	SSLMode      string `yaml:"ssl_mode" env-default:"disable"`
+	PoolMaxConns int    `yaml:"pool_max_conns" env-default:"5"`
 }
 
 type API struct {
 	Host string `yaml:"host"`
 	Port string `yaml:"port"`
+	JWT  JWT    `yaml:"jwt"`
+}
+
+type JWT struct {
+	SecretKey       string        `yaml:"secret_key" env:"API_JWT_SECRET_KEY"`
+	AccessTokenTTL  time.Duration `yaml:"access_token_ttl" env:"API_JWT_ACCESS_TOKEN_TTL"`
+	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl" env:"API_JWT_REFRESH_TOKEN_TTL"`
 }
 
 func LoadConfig(path string) (*Config, error) {
