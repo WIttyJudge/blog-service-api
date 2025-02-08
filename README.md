@@ -1,2 +1,16 @@
 # blog-service-api
-Backend API for simple blog
+
+## Migrations
+
+### Create
+
+```sh
+goose -s -dir migrations/ create create_user_table sql
+```
+
+
+## TODO
+
+1.  Metrics / Traces
+2. Swagger
+3. Tests?

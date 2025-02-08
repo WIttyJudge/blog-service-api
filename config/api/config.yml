@@ -9,6 +9,12 @@ databases:
     database: blog
     ssl_mode: disable
     pool_max_conns: 5
+  redis:
+    host: localhost
+    port: 6379
+    password:
+    database: 0
+    pool_max_conns: 5
 
 api:
   host:

@@ -9,23 +9,25 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/wittyjudge/blog-service-api/internal/auth"
 	"github.com/wittyjudge/blog-service-api/internal/config"
 	"github.com/wittyjudge/blog-service-api/internal/domains"
 	"github.com/wittyjudge/blog-service-api/internal/repositories"
+	"github.com/wittyjudge/blog-service-api/internal/services"
 	"github.com/wittyjudge/blog-service-api/internal/validator"
 	"go.uber.org/zap"
 )
 
 type API struct {
-	ctx       context.Context
-	config    *config.Config
-	logger    *zap.Logger
-	validator *validator.Validator
-	jwtMaker  *auth.JWTMaker
+	ctx         context.Context
+	config      *config.Config
+	logger      *zap.Logger
+	validator   *validator.Validator
+	jwtManager  *auth.JWTManager
+	redisClient *redis.Client
 
-	userRepo    domains.UserRepository
-	sessionRepo domains.SessionRepository
+	userService domains.UserService
 	httpSrv     *http.Server
 }
 
@@ -43,28 +45,26 @@ type ErrorFormat struct {
 	Messages []string `json:"messages,omitempty"`
 }
 
-func NewAPI(ctx context.Context, config *config.Config, logger *zap.Logger, pgPool *pgxpool.Pool) *API {
+func NewAPI(ctx context.Context, config *config.Config, logger *zap.Logger, pgPool *pgxpool.Pool, redisClient *redis.Client) *API {
 	userRepo := repositories.NewPostgresUser(ctx, pgPool)
-	sessionRepo := repositories.NewPostgresSession(ctx, pgPool)
-	// userService := services.NewUserService(ctx, userRepo, logger, validator)
+	userService := services.NewUserService(ctx, logger, userRepo, redisClient)
 
 	api := &API{
-		ctx:       ctx,
-		config:    config,
-		logger:    logger,
-		validator: validator.New(),
-		jwtMaker:  auth.NewJWTMaker(config.API.JWT),
+		ctx:         ctx,
+		config:      config,
+		logger:      logger,
+		jwtManager:  auth.NewJWTManager(config.API.JWT),
+		redisClient: redisClient,
+		validator:   validator.New(),
 
-		userRepo:    userRepo,
-		sessionRepo: sessionRepo,
+		userService: userService,
 	}
 
-	httpSrv := &http.Server{
+	api.httpSrv = &http.Server{
 		Addr:    config.API.HostPort(),
 		Handler: api.routers(),
 	}
 
-	api.httpSrv = httpSrv
 	return api
 }
 
@@ -95,15 +95,15 @@ func (a *API) routers() *chi.Mux {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/healthcheck", a.healthCheckHandler())
 
-		r.Get("/secure", func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("Super secure endpoint"))
-		})
-
 		r.Route("/auth", func(r chi.Router) {
-			r.Post("/login", a.LoginUser())
-			r.Post("/register", a.CreateUser())
-			r.Post("/refresh", a.RefreshAccessToken())
-			r.Post("/logout", a.LogoutUser())
+			r.Post("/login", a.loginUserHandler())
+			r.Post("/register", a.registerUserHandler())
+
+			r.Group(func(r chi.Router) {
+				r.Use(a.JWTRefreshTokenMiddleware)
+				r.Post("/refresh", a.refreshAccessTokenHandler())
+				r.Post("/logout", a.logoutUserHandler())
+			})
 		})
 	})
 

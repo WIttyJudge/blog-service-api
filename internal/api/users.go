@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/wittyjudge/blog-service-api/internal/auth"
 	"github.com/wittyjudge/blog-service-api/internal/domains"
@@ -13,7 +14,7 @@ type LoginUserPayload struct {
 	Password string `json:"password" validate:"required"`
 }
 
-func (a *API) CreateUser() http.HandlerFunc {
+func (a *API) registerUserHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := &domains.User{}
 
@@ -28,20 +29,13 @@ func (a *API) CreateUser() http.HandlerFunc {
 			return
 		}
 
-		if a.userRepo.CheckIfExistsByEmail(user.Email) {
+		if a.userService.CheckIfExistsByEmail(user.Email) {
 			a.errorResponse(w, fmt.Sprintf("user with %s email already exist", user.Email), http.StatusBadRequest)
 			return
 		}
 
-		hashedPassword, err := auth.HashPassword(user.Password)
-		if err != nil {
+		if err := a.userService.Create(user); err != nil {
 			a.errorResponse(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		user.Password = hashedPassword
-
-		if err := a.userRepo.Create(user); err != nil {
-			a.errorResponse(w, fmt.Sprintf("failed to create user: %v", err), http.StatusInternalServerError)
 			return
 		}
 
@@ -53,7 +47,7 @@ func (a *API) CreateUser() http.HandlerFunc {
 	}
 }
 
-func (a *API) LoginUser() http.HandlerFunc {
+func (a *API) loginUserHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		payload := &LoginUserPayload{}
 
@@ -68,36 +62,26 @@ func (a *API) LoginUser() http.HandlerFunc {
 			return
 		}
 
-		user, err := a.userRepo.GetByEmail(payload.Email)
+		if err := a.userService.VerifyCredentials(payload.Email, payload.Password); err != nil {
+			a.errorResponse(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		user, err := a.userService.GetByEmail(payload.Email)
 		if err != nil {
-			a.errorResponse(w, "invalid email or password", http.StatusBadRequest)
+			a.errorResponse(w, "user not found", http.StatusNotFound)
 			return
 		}
 
-		if !auth.CheckPasswordHash(user.Password, payload.Password) {
-			a.errorResponse(w, "invalid email or password", http.StatusBadRequest)
-			return
-		}
-
-		accessToken, accessClaims, err := a.jwtMaker.CreateToken(auth.AccessTokenType, user.ID)
-		if err != nil {
-			a.errorResponse(w, fmt.Sprintf("failed to create token: %v", err), http.StatusInternalServerError)
-			return
-		}
-
-		refreshToken, refreshClaims, err := a.jwtMaker.CreateToken(auth.RefreshTokenType, user.ID)
+		accessToken, accessClaims, err := a.jwtManager.CreateToken(auth.AccessTokenType, user.ID)
 		if err != nil {
 			a.errorResponse(w, fmt.Sprintf("failed to create token: %v", err), http.StatusInternalServerError)
 			return
 		}
 
-		session := &domains.Session{
-			UserID:       user.ID,
-			RefreshToken: refreshToken,
-			ExpiresAt:    refreshClaims.ExpiresAt.Time,
-		}
-		if err := a.sessionRepo.CreateOrUpdate(session); err != nil {
-			a.errorResponse(w, fmt.Sprintf("failed to create token in db: %v", err), http.StatusInternalServerError)
+		refreshToken, refreshClaims, err := a.jwtManager.CreateToken(auth.RefreshTokenType, user.ID)
+		if err != nil {
+			a.errorResponse(w, fmt.Sprintf("failed to create token: %v", err), http.StatusInternalServerError)
 			return
 		}
 
@@ -112,11 +96,40 @@ func (a *API) LoginUser() http.HandlerFunc {
 	}
 }
 
-func (a *API) RefreshAccessToken() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {}
+func (a *API) refreshAccessTokenHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims := JWTUserClaimsCtx(r.Context())
+
+		accessToken, accessClaims, err := a.jwtManager.CreateToken(auth.AccessTokenType, claims.UserID)
+		if err != nil {
+			a.errorResponse(w, fmt.Sprintf("failed to create token: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		resp := map[string]string{
+			"access_token":            accessToken,
+			"access_token_expires_at": accessClaims.ExpiresAt.Time.String(),
+		}
+		a.successResponse(w, resp, http.StatusOK)
+	}
 }
 
-func (a *API) LogoutUser() http.HandlerFunc {
+func (a *API) logoutUserHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		claims := JWTUserClaimsCtx(r.Context())
+		tokenStr, err := a.jwtManager.TokenFromRequest(r)
+		if err != nil {
+			a.errorResponse(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
+		ttl := time.Until(claims.ExpiresAt.Time)
+
+		key := fmt.Sprintf("jwt-blocklist:%s", tokenStr)
+		_, err = a.redisClient.Set(a.ctx, key, true, ttl).Result()
+		if err != nil {
+			a.errorResponse(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }

@@ -16,6 +16,7 @@ type Config struct {
 
 type Databases struct {
 	PostgreSQL PostgreSQL `yaml:"postgresql"`
+	Redis      Redis      `yaml:"redis"`
 }
 
 type PostgreSQL struct {
@@ -25,6 +26,14 @@ type PostgreSQL struct {
 	Username     string `yaml:"username"`
 	Database     string `yaml:"database"`
 	SSLMode      string `yaml:"ssl_mode" env-default:"disable"`
+	PoolMaxConns int    `yaml:"pool_max_conns" env-default:"5"`
+}
+
+type Redis struct {
+	Host         string `yaml:"host"`
+	Port         string `yaml:"port"`
+	Password     string `yaml:"password"`
+	Database     int    `yaml:"database"`
 	PoolMaxConns int    `yaml:"pool_max_conns" env-default:"5"`
 }
 
@@ -50,6 +59,10 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 func (a *API) HostPort() string {
+	return net.JoinHostPort(a.Host, a.Port)
+}
+
+func (a *Redis) HostPort() string {
 	return net.JoinHostPort(a.Host, a.Port)
 }
 
