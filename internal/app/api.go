@@ -11,7 +11,7 @@ import (
 )
 
 func StartAPI(ctx context.Context, config *config.Config) error {
-	logger := logger.NewLogger(config.Environment)
+	logger := logger.New(config.Environment)
 	defer logger.Sync()
 
 	pgPool, err := database.NewPostgreSQLPool(ctx, config.Databases.PostgreSQL)

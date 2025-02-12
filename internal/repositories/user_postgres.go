@@ -8,19 +8,19 @@ import (
 	"github.com/wittyjudge/blog-service-api/internal/domains"
 )
 
-type PostgresUser struct {
+type UserPostgres struct {
 	ctx    context.Context
 	pgPool *pgxpool.Pool
 }
 
-func NewPostgresUser(ctx context.Context, pgPool *pgxpool.Pool) *PostgresUser {
-	return &PostgresUser{
+func NewUserPostgres(ctx context.Context, pgPool *pgxpool.Pool) *UserPostgres {
+	return &UserPostgres{
 		ctx:    ctx,
 		pgPool: pgPool,
 	}
 }
 
-func (p *PostgresUser) GetByEmail(email string) (*domains.User, error) {
+func (p *UserPostgres) GetByEmail(email string) (*domains.User, error) {
 	sql := `
 	  SELECT id, first_name, last_name, email, password, created_at, updated_at
 		FROM users
@@ -43,7 +43,7 @@ func (p *PostgresUser) GetByEmail(email string) (*domains.User, error) {
 	return user, nil
 }
 
-func (p *PostgresUser) Create(user *domains.User) error {
+func (p *UserPostgres) Create(user *domains.User) error {
 	sql := `
 		INSERT INTO users (first_name, last_name, email, password)
 		VALUES (@firstName, @lastName, @email, @password)
@@ -63,7 +63,7 @@ func (p *PostgresUser) Create(user *domains.User) error {
 	)
 }
 
-func (p *PostgresUser) CheckIfExistsByEmail(email string) bool {
+func (p *UserPostgres) CheckIfExistsByEmail(email string) bool {
 	sql := "SELECT EXISTS(SELECT 1 FROM users where email = @email)"
 	args := pgx.NamedArgs{"email": email}
 

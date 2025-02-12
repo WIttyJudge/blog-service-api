@@ -24,15 +24,13 @@ type UserService struct {
 }
 
 func NewUserService(ctx context.Context, logger *zap.Logger, repo domains.UserRepository, redisClient *redis.Client) *UserService {
-	u := &UserService{
+	return &UserService{
 		ctx:    ctx,
 		logger: logger,
 
 		repo:        repo,
 		redisClient: redisClient,
 	}
-
-	return u
 }
 
 func (s *UserService) GetByEmail(email string) (*domains.User, error) {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"github.com/wittyjudge/blog-service-api/internal/auth"
 	"github.com/wittyjudge/blog-service-api/internal/config"
@@ -24,11 +25,13 @@ type API struct {
 	config      *config.Config
 	logger      *zap.Logger
 	validator   *validator.Validator
-	jwtManager  *auth.JWTManager
 	redisClient *redis.Client
 
-	userService domains.UserService
-	httpSrv     *http.Server
+	authService    *services.AuthService
+	userService    domains.UserService
+	articleService domains.ArticleService
+
+	httpSrv *http.Server
 }
 
 type SuccessResponse struct {
@@ -46,18 +49,24 @@ type ErrorFormat struct {
 }
 
 func NewAPI(ctx context.Context, config *config.Config, logger *zap.Logger, pgPool *pgxpool.Pool, redisClient *redis.Client) *API {
-	userRepo := repositories.NewPostgresUser(ctx, pgPool)
+	jwtManager := auth.NewJWTManager(config.API.JWT)
+
+	userRepo := repositories.NewUserPostgres(ctx, pgPool)
+	articleRepo := repositories.NewArticlePostgres(ctx, pgPool)
+
+	authService := services.NewAuthService(ctx, jwtManager, redisClient)
 	userService := services.NewUserService(ctx, logger, userRepo, redisClient)
+	articleService := services.NewArticleService(ctx, logger, articleRepo, redisClient)
 
 	api := &API{
-		ctx:         ctx,
-		config:      config,
-		logger:      logger,
-		jwtManager:  auth.NewJWTManager(config.API.JWT),
-		redisClient: redisClient,
-		validator:   validator.New(),
+		ctx:       ctx,
+		config:    config,
+		logger:    logger,
+		validator: validator.New(),
 
-		userService: userService,
+		authService:    authService,
+		userService:    userService,
+		articleService: articleService,
 	}
 
 	api.httpSrv = &http.Server{
@@ -91,18 +100,35 @@ func (a *API) Stop() error {
 
 func (a *API) routers() *chi.Mux {
 	r := chi.NewRouter()
+	r.Use(a.Recovery)
+
+	r.Handle("/metrics", promhttp.Handler())
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Get("/healthcheck", a.healthCheckHandler())
+		r.Get("/healthz", a.healthzHandler())
 
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/login", a.loginUserHandler())
 			r.Post("/register", a.registerUserHandler())
 
 			r.Group(func(r chi.Router) {
-				r.Use(a.JWTRefreshTokenMiddleware)
+				r.Use(a.JWTRefreshToken)
 				r.Post("/refresh", a.refreshAccessTokenHandler())
 				r.Post("/logout", a.logoutUserHandler())
+			})
+		})
+
+		r.Route("/articles", func(r chi.Router) {
+			r.With(a.Pagination).Get("/", a.getArticlesHandler())
+			r.With(a.JWTAccessToken).Post("/", a.createArticleHandler())
+
+			r.Route("/{slug}", func(r chi.Router) {
+				r.Get("/", a.getArticleHandler())
+				r.Group(func(r chi.Router) {
+					r.Use(a.JWTAccessToken)
+					r.Put("/", a.updateArticleHandler())
+					r.Delete("/", a.deleteArticleHandler())
+				})
 			})
 		})
 	})
@@ -110,39 +136,42 @@ func (a *API) routers() *chi.Mux {
 	return r
 }
 
-func (a *API) successResponse(w http.ResponseWriter, data any, code int) error {
+func (a *API) successResponse(w http.ResponseWriter, data any, code int) {
 	resp := SuccessResponse{Data: data}
-	return a.respond(w, resp, code)
+	a.respond(w, resp, code)
 }
 
-func (a *API) errorResponse(w http.ResponseWriter, message any, code int) error {
+func (a *API) errorResponse(w http.ResponseWriter, message any, code int) {
 	if message, ok := message.(string); ok {
 		resp := ErrorResponse{ErrorFormat{Code: code, Message: message}}
-		return a.respond(w, resp, code)
+		a.respond(w, resp, code)
+		return
 	}
 
 	messages := message.([]string)
 
 	if len(messages) == 1 {
 		resp := ErrorResponse{ErrorFormat{Code: code, Message: messages[0]}}
-		return a.respond(w, resp, code)
+		a.respond(w, resp, code)
+		return
 	}
 
 	resp := ErrorResponse{ErrorFormat{Code: code, Messages: messages}}
-	return a.respond(w, resp, code)
+	a.respond(w, resp, code)
 }
 
-func (a *API) respond(w http.ResponseWriter, resp any, code int) error {
+func (a *API) respond(w http.ResponseWriter, resp any, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 
-	return a.toJSON(w, resp)
+	a.toJSON(w, resp)
 }
 
 func (a *API) fromJSON(r io.Reader, s any) error {
 	return json.NewDecoder(r).Decode(s)
 }
 
-func (a *API) toJSON(w io.Writer, s any) error {
-	return json.NewEncoder(w).Encode(s)
+func (a *API) toJSON(w io.Writer, s any) {
+	_ = json.NewEncoder(w).Encode(s)
+	return
 }

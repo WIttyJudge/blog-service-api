@@ -5,7 +5,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func NewLogger(env string) *zap.Logger {
+func New(env string) *zap.Logger {
 	var config zap.Config
 
 	if env == "development" {

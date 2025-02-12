@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-func (a *API) healthCheckHandler() http.HandlerFunc {
+func (a *API) healthzHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		resp := map[string]string{"status": "ok"}
 		_ = json.NewEncoder(w).Encode(resp)

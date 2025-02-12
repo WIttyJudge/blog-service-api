@@ -3,8 +3,6 @@ package auth
 import (
 	"errors"
 	"fmt"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -62,6 +60,8 @@ func (m *JWTManager) CreateToken(tokenType JWTTokenType, userID int) (string, *U
 }
 
 func (m *JWTManager) VerifyToken(tokenStr string) (*UserClaims, error) {
+	// It checks if the token is valid here.
+	// If not, it returns: token has invalid claims: token is expired
 	token, err := jwt.ParseWithClaims(tokenStr, &UserClaims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
@@ -79,18 +79,4 @@ func (m *JWTManager) VerifyToken(tokenStr string) (*UserClaims, error) {
 	}
 
 	return claims, nil
-}
-
-func (m *JWTManager) TokenFromRequest(r *http.Request) (string, error) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return "", fmt.Errorf("missing authorization header")
-	}
-
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader {
-		return "", fmt.Errorf("invalid token format")
-	}
-
-	return tokenString, nil
 }
