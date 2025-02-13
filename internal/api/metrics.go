@@ -19,7 +19,7 @@ var (
 		Buckets:   prometheus.DefBuckets,
 	})
 
-	httpCurrentDurationSec = promauto.NewGauge(prometheus.GaugeOpts{
+	httpCurrentRequests = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "http",
 		Name:      "current_requests",
 		Help:      "Current number of requests in process",

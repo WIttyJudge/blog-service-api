@@ -99,8 +99,8 @@ func (a *API) PopulateRequestID(next http.Handler) http.Handler {
 
 func (a *API) Logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpCurrentDurationSec.Inc()
-		defer httpCurrentDurationSec.Dec()
+		httpCurrentRequests.Inc()
+		defer httpCurrentRequests.Dec()
 
 		start := time.Now()
 
