@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -82,6 +83,10 @@ func (a *API) getArticleHandler() http.HandlerFunc {
 		slug := chi.URLParam(r, "slug")
 
 		article, err := a.articleService.GetBySlug(slug)
+		if errors.Is(err, domains.ErrArticleNotFound) {
+			a.errorResponse(w, err.Error(), http.StatusNotFound)
+			return
+		}
 		if err != nil {
 			a.errorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -162,6 +167,12 @@ func (a *API) updateArticleHandler() http.HandlerFunc {
 			a.errorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		resp := &CreateArticleResp{
+			ID:   article.ID,
+			Slug: article.Slug,
+		}
+		a.successResponse(w, resp, http.StatusOK)
 	}
 }
 
@@ -174,5 +185,7 @@ func (a *API) deleteArticleHandler() http.HandlerFunc {
 			a.errorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		a.successResponse(w, nil, http.StatusOK)
 	}
 }

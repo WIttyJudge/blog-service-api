@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/wittyjudge/blog-service-api/internal/domains"
@@ -44,12 +43,7 @@ func (p *ArticleService) GetAll(cursor int, pageSize int) ([]*domains.Article, i
 }
 
 func (s *ArticleService) GetBySlug(slug string) (*domains.Article, error) {
-	article, err := s.repo.GetBySlug(slug)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get article: %w", err)
-	}
-
-	return article, nil
+	return s.repo.GetBySlug(slug)
 }
 
 func (s *ArticleService) Create(article *domains.Article) error {

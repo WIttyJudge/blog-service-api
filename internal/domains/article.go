@@ -1,10 +1,13 @@
 package domains
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"time"
 )
+
+var ErrArticleNotFound = errors.New("article not found")
 
 type Article struct {
 	ID        int       `json:"id"`

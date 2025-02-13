@@ -2,15 +2,12 @@ package repositories
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/wittyjudge/blog-service-api/internal/domains"
 )
-
-var ErrArticleNotFound = errors.New("article not found")
 
 type ArticlePostgres struct {
 	ctx    context.Context
@@ -78,7 +75,7 @@ func (p *ArticlePostgres) GetBySlug(slug string) (*domains.Article, error) {
 	}
 
 	if len(articles) == 0 {
-		return nil, ErrArticleNotFound
+		return nil, domains.ErrArticleNotFound
 	}
 
 	return articles[0], nil
@@ -93,6 +90,7 @@ func (p *ArticlePostgres) Update(article *domains.Article) error {
 			updated_at = @updatedAt
 		WHERE slug = @currentSlug
 		AND author_id = @authorID
+		RETURNING id, slug
 	`
 
 	args := pgx.NamedArgs{
@@ -104,8 +102,10 @@ func (p *ArticlePostgres) Update(article *domains.Article) error {
 		"updatedAt":   time.Now(),
 	}
 
-	_, err := p.pgPool.Exec(p.ctx, sql, args)
-	return err
+	return p.pgPool.QueryRow(p.ctx, sql, args).Scan(
+		&article.ID,
+		&article.Slug,
+	)
 }
 
 func (p *ArticlePostgres) Create(article *domains.Article) error {
