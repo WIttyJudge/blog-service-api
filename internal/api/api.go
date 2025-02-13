@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -101,6 +102,7 @@ func (a *API) Stop() error {
 func (a *API) routers() *chi.Mux {
 	r := chi.NewRouter()
 
+	r.Use(chiMiddleware.RealIP)
 	r.Use(a.PopulateRequestID)
 	r.Use(a.Logging)
 	r.Use(a.Recovery)

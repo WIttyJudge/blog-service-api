@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -109,22 +108,13 @@ func (a *API) Logging(next http.Handler) http.Handler {
 
 		duration := time.Since(start).Seconds()
 
-		requestAddr := r.Header.Get("X-Forwarded-For")
-		if requestAddr == "" {
-			if ip, _, err := net.SplitHostPort(r.RemoteAddr); err != nil {
-				requestAddr = "unknown"
-			} else {
-				requestAddr = ip
-			}
-		}
-
 		fields := []zap.Field{
 			zap.String("uri", r.RequestURI),
 			zap.String("method", r.Method),
 			zap.Float64("duration_sec", duration),
 			zap.Int("response#status_code", lrw.statusCode),
 			zap.Int("response#bytes", lrw.bytes),
-			zap.String("request#addr", requestAddr),
+			zap.String("request#addr", r.RemoteAddr),
 			zap.String("request#id", w.Header().Get("X-Request-ID")),
 		}
 
