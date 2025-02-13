@@ -2,9 +2,13 @@ package api
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/wittyjudge/blog-service-api/internal/auth"
 	"go.uber.org/zap"
 )
@@ -26,6 +30,27 @@ func NewPaginationOptions() *PaginationOptions {
 		Cursor:   0,
 		PageSize: 5,
 	}
+}
+
+type LoggingResponseWriter struct {
+	w          http.ResponseWriter
+	statusCode int
+	bytes      int
+}
+
+func (lrw *LoggingResponseWriter) Header() http.Header {
+	return lrw.w.Header()
+}
+
+func (lrw *LoggingResponseWriter) Write(bb []byte) (int, error) {
+	wb, err := lrw.w.Write(bb)
+	lrw.bytes += wb
+	return wb, err
+}
+
+func (lrw *LoggingResponseWriter) WriteHeader(statusCode int) {
+	lrw.w.WriteHeader(statusCode)
+	lrw.statusCode = statusCode
 }
 
 func (a *API) JWTAccessToken(next http.Handler) http.Handler {
@@ -61,6 +86,57 @@ func (a *API) JWTRefreshToken(next http.Handler) http.Handler {
 
 		ctx := withJWTUserClaims(r.Context(), userClaims)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (a *API) PopulateRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := uuid.Must(uuid.NewV4()).String()
+		w.Header().Set("X-Request-ID", id)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *API) Logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpCurrentDurationSec.Inc()
+		defer httpCurrentDurationSec.Dec()
+
+		start := time.Now()
+
+		lrw := &LoggingResponseWriter{w: w}
+		next.ServeHTTP(lrw, r)
+
+		duration := time.Since(start).Seconds()
+
+		requestAddr := r.Header.Get("X-Forwarded-For")
+		if requestAddr == "" {
+			if ip, _, err := net.SplitHostPort(r.RemoteAddr); err != nil {
+				requestAddr = "unknown"
+			} else {
+				requestAddr = ip
+			}
+		}
+
+		fields := []zap.Field{
+			zap.String("uri", r.RequestURI),
+			zap.String("method", r.Method),
+			zap.Float64("duration_sec", duration),
+			zap.Int("response#status_code", lrw.statusCode),
+			zap.Int("response#bytes", lrw.bytes),
+			zap.String("request#addr", requestAddr),
+			zap.String("request#id", w.Header().Get("X-Request-ID")),
+		}
+
+		if lrw.statusCode >= 200 && lrw.statusCode < 300 {
+			a.logger.Info("", fields...)
+		} else if lrw.statusCode >= 500 {
+			// TODO: Find the way to show an error mesage here.
+			a.logger.Error("internal server error", fields...)
+		}
+
+		httpRequestDurationSec.Observe(duration)
+		httpRequestsTotal.WithLabelValues(fmt.Sprint(lrw.statusCode)).Inc()
 	})
 }
 

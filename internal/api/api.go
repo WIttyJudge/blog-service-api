@@ -100,6 +100,9 @@ func (a *API) Stop() error {
 
 func (a *API) routers() *chi.Mux {
 	r := chi.NewRouter()
+
+	r.Use(a.PopulateRequestID)
+	r.Use(a.Logging)
 	r.Use(a.Recovery)
 
 	r.Handle("/metrics", promhttp.Handler())
