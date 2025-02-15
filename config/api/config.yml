@@ -1,13 +1,14 @@
 environment: development
 
 databases:
-  postgresql:
+  postgres:
     host: localhost
     port: 5432
     password: root
     username: postgres
     database: blog
     ssl_mode: disable
+    pool_min_conns: 1
     pool_max_conns: 5
   redis:
     host: localhost

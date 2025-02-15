@@ -8,8 +8,8 @@ import (
 	"github.com/wittyjudge/blog-service-api/internal/config"
 )
 
-func NewPostgreSQLPool(ctx context.Context, config config.PostgreSQL) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, config.ConnectionURL())
+func NewPostgreSQLPool(ctx context.Context, config config.Postgres) (*pgxpool.Pool, error) {
+	pool, err := pgxpool.New(ctx, config.ConnectionDSN())
 	if err != nil {
 		return nil, err
 	}

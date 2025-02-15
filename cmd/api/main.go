@@ -17,13 +17,13 @@ var configPath = flag.String("config", "./config/api/config.yml", "path to api c
 func main() {
 	flag.Parse()
 
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer cancel()
+
 	config, err := config.LoadConfig(*configPath)
 	if err != nil {
 		log.Fatal(fmt.Errorf("failed to load config file: %w", err))
 	}
-
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer cancel()
 
 	if err := app.StartAPI(ctx, config); err != nil {
 		log.Fatal(err)
