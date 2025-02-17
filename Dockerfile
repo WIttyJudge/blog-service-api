@@ -15,8 +15,6 @@ FROM alpine:3.21 AS runner
 
 WORKDIR /app
 
-RUN apk add --no-cache bash
-
 COPY --from=builder /app/api ./bin/
 COPY --from=builder /app/migrate ./bin/
 
