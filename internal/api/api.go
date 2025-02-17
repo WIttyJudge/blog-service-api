@@ -11,7 +11,6 @@ import (
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9"
 	"github.com/wittyjudge/blog-service-api/internal/auth"
 	"github.com/wittyjudge/blog-service-api/internal/config"
 	"github.com/wittyjudge/blog-service-api/internal/domains"
@@ -22,11 +21,10 @@ import (
 )
 
 type API struct {
-	ctx         context.Context
-	config      *config.Config
-	logger      *zap.Logger
-	validator   *validator.Validator
-	redisClient *redis.Client
+	ctx       context.Context
+	config    *config.Config
+	logger    *zap.Logger
+	validator *validator.Validator
 
 	authService    *services.AuthService
 	userService    domains.UserService
@@ -49,15 +47,15 @@ type ErrorFormat struct {
 	Messages []string `json:"messages,omitempty"`
 }
 
-func NewAPI(ctx context.Context, config *config.Config, logger *zap.Logger, pgPool *pgxpool.Pool, redisClient *redis.Client) *API {
+func NewAPI(ctx context.Context, config *config.Config, logger *zap.Logger, pgPool *pgxpool.Pool) *API {
 	jwtManager := auth.NewJWTManager(config.API.JWT)
 
 	userRepo := repositories.NewUserPostgres(ctx, pgPool)
 	articleRepo := repositories.NewArticlePostgres(ctx, pgPool)
 
-	authService := services.NewAuthService(ctx, jwtManager, redisClient)
-	userService := services.NewUserService(ctx, logger, userRepo, redisClient)
-	articleService := services.NewArticleService(ctx, logger, articleRepo, redisClient)
+	authService := services.NewAuthService(ctx, jwtManager)
+	userService := services.NewUserService(ctx, logger, userRepo)
+	articleService := services.NewArticleService(ctx, logger, articleRepo)
 
 	api := &API{
 		ctx:       ctx,

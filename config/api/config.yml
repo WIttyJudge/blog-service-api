@@ -10,12 +10,12 @@ databases:
     ssl_mode: disable
     pool_min_conns: 1
     pool_max_conns: 5
-  redis:
-    host: localhost
-    port: 6379
-    password:
-    database: 0
-    pool_max_conns: 5
+  # redis:
+  #   host: localhost
+  #   port: 6379
+  #   password:
+  #   database: 0
+  #   pool_max_conns: 5
 
 api:
   host:

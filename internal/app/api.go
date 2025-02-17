@@ -20,13 +20,13 @@ func StartAPI(ctx context.Context, config *config.Config) error {
 	}
 	defer pgPool.Close()
 
-	redisClient, err := database.NewRedisClient(ctx, config.Databases.Redis)
-	if err != nil {
-		return err
-	}
-	defer redisClient.Close()
+	// redisClient, err := database.NewRedisClient(ctx, config.Databases.Redis)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer redisClient.Close()
 
-	api := api.NewAPI(ctx, config, logger, pgPool, redisClient)
+	api := api.NewAPI(ctx, config, logger, pgPool)
 
 	go func() {
 		if err := api.Start(); err != nil {

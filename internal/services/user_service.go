@@ -2,47 +2,37 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/wittyjudge/blog-service-api/internal/auth"
 	"github.com/wittyjudge/blog-service-api/internal/domains"
+	"github.com/wittyjudge/blog-service-api/pkg/cache"
 	"go.uber.org/zap"
 )
 
 var ErrInvalidEmailOrPassword = errors.New("invalid email or password")
 
 type UserService struct {
-	ctx    context.Context
-	logger *zap.Logger
-
-	repo        domains.UserRepository
-	redisClient *redis.Client
+	ctx              context.Context
+	logger           *zap.Logger
+	repo             domains.UserRepository
+	userByEmailCache *cache.Cache[string, *domains.User]
 }
 
-func NewUserService(ctx context.Context, logger *zap.Logger, repo domains.UserRepository, redisClient *redis.Client) *UserService {
+func NewUserService(ctx context.Context, logger *zap.Logger, repo domains.UserRepository) *UserService {
 	return &UserService{
-		ctx:    ctx,
-		logger: logger,
-
-		repo:        repo,
-		redisClient: redisClient,
+		ctx:              ctx,
+		logger:           logger,
+		repo:             repo,
+		userByEmailCache: cache.New[string, *domains.User](1000, "user_by_email_cache"),
 	}
 }
 
 func (s *UserService) GetByEmail(email string) (*domains.User, error) {
-	key := fmt.Sprintf("user:%s", email)
-	cachedUser, err := s.redisClient.Get(s.ctx, key).Result()
-	if err == nil {
-		user := &domains.User{}
-		if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
-			return nil, err
-		}
-
-		return user, nil
+	if cached, ok := s.userByEmailCache.Get(email); ok {
+		return cached, nil
 	}
 
 	user, err := s.repo.GetByEmail(email)
@@ -50,15 +40,7 @@ func (s *UserService) GetByEmail(email string) (*domains.User, error) {
 		return nil, err
 	}
 
-	userJson, err := json.Marshal(user)
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.redisClient.Set(s.ctx, key, userJson, 15*time.Minute).Err()
-	if err != nil {
-		return nil, err
-	}
+	s.userByEmailCache.Set(email, user, 10*time.Minute)
 
 	return user, nil
 }

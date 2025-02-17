@@ -7,14 +7,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/wittyjudge/blog-service-api/internal/auth"
+	"github.com/wittyjudge/blog-service-api/pkg/cache"
 )
 
 type AuthService struct {
-	ctx        context.Context
-	jwtManager *auth.JWTManager
-	cache      *redis.Client
+	ctx               context.Context
+	jwtManager        *auth.JWTManager
+	jwtBlocklistCache *cache.Cache[string, struct{}]
 }
 
 type Token struct {
@@ -35,11 +35,11 @@ type AccessRefreshToken struct {
 	RefreshToken
 }
 
-func NewAuthService(ctx context.Context, jwtManager *auth.JWTManager, cache *redis.Client) *AuthService {
+func NewAuthService(ctx context.Context, jwtManager *auth.JWTManager) *AuthService {
 	return &AuthService{
-		ctx:        ctx,
-		jwtManager: jwtManager,
-		cache:      cache,
+		ctx:               ctx,
+		jwtManager:        jwtManager,
+		jwtBlocklistCache: cache.New[string, struct{}](10_000, "jwt_blocklist_cache"),
 	}
 }
 
@@ -94,20 +94,14 @@ func (s *AuthService) TokenFromRequest(r *http.Request) (string, error) {
 }
 
 func (s *AuthService) BlockToken(token string, ttl time.Duration) error {
-	key := fmt.Sprintf("jwt-blocklist:%s", token)
-	_, err := s.cache.Set(s.ctx, key, true, ttl).Result()
+	s.jwtBlocklistCache.Set(token, struct{}{}, ttl)
 
-	return err
+	return nil
 }
 
 func (s *AuthService) IsBlocked(token string) (bool, error) {
-	key := fmt.Sprintf("jwt-blocklist:%s", token)
-	exists, err := s.cache.Exists(s.ctx, key).Result()
-	if err != nil {
-		return false, err
-	}
-
-	return exists == 1, nil
+	_, ok := s.jwtBlocklistCache.Get(token)
+	return ok, nil
 }
 
 func (s *AuthService) createToken(t auth.JWTTokenType, userID int) (*Token, error) {

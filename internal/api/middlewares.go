@@ -121,7 +121,7 @@ func (a *API) Logging(next http.Handler) http.Handler {
 		if lrw.statusCode >= 200 && lrw.statusCode < 300 {
 			a.logger.Info("", fields...)
 		} else if lrw.statusCode >= 500 {
-			// TODO: Find the way to show an error mesage here.
+			// TODO: Find the way to show an error message here.
 			a.logger.Error("internal server error", fields...)
 		}
 

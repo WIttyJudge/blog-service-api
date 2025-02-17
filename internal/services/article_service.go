@@ -2,27 +2,26 @@ package services
 
 import (
 	"context"
+	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/wittyjudge/blog-service-api/internal/domains"
+	"github.com/wittyjudge/blog-service-api/pkg/cache"
 	"go.uber.org/zap"
 )
 
 type ArticleService struct {
-	ctx    context.Context
-	logger *zap.Logger
-
-	repo        domains.ArticleRepository
-	redisClient *redis.Client
+	ctx                context.Context
+	logger             *zap.Logger
+	repo               domains.ArticleRepository
+	articleBySlugCache *cache.Cache[string, *domains.Article]
 }
 
-func NewArticleService(ctx context.Context, logger *zap.Logger, repo domains.ArticleRepository, redisClient *redis.Client) *ArticleService {
+func NewArticleService(ctx context.Context, logger *zap.Logger, repo domains.ArticleRepository) *ArticleService {
 	return &ArticleService{
-		ctx:    ctx,
-		logger: logger,
-
-		repo:        repo,
-		redisClient: redisClient,
+		ctx:                ctx,
+		logger:             logger,
+		repo:               repo,
+		articleBySlugCache: cache.New[string, *domains.Article](1000, "article_by_slug_cache"),
 	}
 }
 
@@ -43,7 +42,18 @@ func (p *ArticleService) GetAll(cursor int, pageSize int) ([]*domains.Article, i
 }
 
 func (s *ArticleService) GetBySlug(slug string) (*domains.Article, error) {
-	return s.repo.GetBySlug(slug)
+	if cached, ok := s.articleBySlugCache.Get(slug); ok {
+		return cached, nil
+	}
+
+	article, err := s.repo.GetBySlug(slug)
+	if err != nil {
+		return nil, err
+	}
+
+	s.articleBySlugCache.Set(slug, article, 10*time.Minute)
+
+	return article, nil
 }
 
 func (s *ArticleService) Create(article *domains.Article) error {
